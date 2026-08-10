@@ -6,7 +6,176 @@ const CONTACT_DISCORD = "doughmination";
 const CONTACT_DISCORD_ID = "1464890289922641993";
 const CONTACT_EMAIL = "admin@doughmination.win";
 
-function errorPage(status: number): string {
+type OriginState = "unreachable" | "5xx";
+
+/** Max number of characters of the origin's error body we keep. */
+const MAX_ORIGIN_BODY = 2048;
+
+interface ErrorDetails {
+  status: number;
+  origin: OriginState;
+  request: Request;
+  originBody?: string | null;
+  originBodyTruncated?: boolean;
+  originHeaders?: Record<string, string> | null;
+}
+
+interface ErrorReport {
+  error: {
+    status: number;
+    statusText: string;
+    timestamp: string;
+  };
+  request: {
+    method: string;
+    url: string;
+    path: string;
+    cfRay: string | null;
+    userAgent: string | null;
+  };
+  origin: {
+    reachable: boolean;
+    /** null when the origin never responded (connection refused, DNS, etc.) */
+    status: number | null;
+    /** The origin's raw error body, capped; null if unreachable/empty. */
+    body: string | null;
+    bodyTruncated: boolean;
+    /** Allowlisted origin response headers (content-type + x-*). */
+    headers: Record<string, string> | null;
+  };
+  contact: {
+    discord: string;
+    discordId: string;
+    email: string;
+  };
+}
+
+const STATUS_TEXT: Record<number, string> = {
+  500: "Internal Server Error",
+  501: "Not Implemented",
+  502: "Bad Gateway",
+  503: "Service Unavailable",
+  504: "Gateway Timeout",
+  520: "Web Server Returned an Unknown Error",
+  521: "Web Server Is Down",
+  522: "Connection Timed Out",
+  523: "Origin Is Unreachable",
+  524: "A Timeout Occurred",
+};
+
+function buildReport({
+  status,
+  origin,
+  request,
+  originBody,
+  originBodyTruncated,
+  originHeaders,
+}: ErrorDetails): ErrorReport {
+  const url = new URL(request.url);
+  return {
+    error: {
+      status,
+      statusText: STATUS_TEXT[status] ?? "Server Error",
+      timestamp: new Date().toISOString(),
+    },
+    request: {
+      method: request.method,
+      url: request.url,
+      path: url.pathname + url.search,
+      cfRay: request.headers.get("cf-ray"),
+      userAgent: request.headers.get("user-agent"),
+    },
+    origin: {
+      reachable: origin !== "unreachable",
+      status: origin === "unreachable" ? null : status,
+      body: originBody ?? null,
+      bodyTruncated: originBodyTruncated ?? false,
+      headers: originHeaders ?? null,
+    },
+    contact: {
+      discord: CONTACT_DISCORD,
+      discordId: CONTACT_DISCORD_ID,
+      email: CONTACT_EMAIL,
+    },
+  };
+}
+
+/** Escape a string so it is safe to drop inside an HTML text node. */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+/** Read an origin error body, capped to MAX_ORIGIN_BODY characters. */
+async function readBodyCapped(
+  response: Response,
+): Promise<{ text: string; truncated: boolean }> {
+  let text: string;
+  try {
+    text = await response.text();
+  } catch {
+    return { text: "", truncated: false };
+  }
+  if (text.length > MAX_ORIGIN_BODY) {
+    return { text: text.slice(0, MAX_ORIGIN_BODY), truncated: true };
+  }
+  return { text, truncated: false };
+}
+
+/** Keep only content-type and x-* headers; never expose set-cookie. */
+function pickOriginHeaders(headers: Headers): Record<string, string> {
+  const out: Record<string, string> = {};
+  headers.forEach((value, key) => {
+    const k = key.toLowerCase();
+    if (k === "set-cookie") return;
+    if (k === "content-type" || k.startsWith("x-")) {
+      out[k] = value;
+    }
+  });
+  return out;
+}
+
+function errorPage(details: ErrorDetails): string {
+  const report = buildReport(details);
+  const status = report.error.status;
+  // Only expose the debug JSON when the owner opts in via a request header.
+  // Set "X-Dough-Owner: true" (e.g. with a header-editor extension) to see it.
+  const showDebug = details.request.headers.get("x-dough-owner") === "true";
+  const reportJson = JSON.stringify(report, null, 2);
+  const reportJsonHtml = escapeHtml(reportJson);
+  // Safe to embed in a <script> tag: JSON.stringify already escapes quotes,
+  // and we neutralise the only sequence that could close the tag early.
+  const reportJsonScript = reportJson.replace(/</g, "\\u003c");
+
+  const debugBlock = showDebug
+    ? `
+      <details class="debug" open>
+        <summary>
+          <span>Debug info (for the site owner)</span>
+          <button type="button" class="debug-copy" id="debug-copy">copy JSON</button>
+        </summary>
+        <pre class="debug-json" id="debug-json">${reportJsonHtml}</pre>
+      </details>`
+    : "";
+
+  const debugScript = showDebug
+    ? `
+      var errorReport = ${reportJsonScript};
+
+      document.getElementById("debug-copy").addEventListener("click", function (event) {
+        event.preventDefault();
+        var btn = event.currentTarget;
+        var text = JSON.stringify(errorReport, null, 2);
+        navigator.clipboard.writeText(text).then(function () {
+          var original = btn.textContent;
+          btn.textContent = "copied!";
+          setTimeout(function () { btn.textContent = original; }, 1500);
+        });
+      });`
+    : "";
+
   return `<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -59,6 +228,47 @@ function errorPage(status: number): string {
       .copied { color: #a6e3a1; font-size: 0.8rem; margin-left: 0.5rem; opacity: 0; transition: opacity 0.15s ease; }
       .copied.show { opacity: 1; }
       .code { color: #6c7086; font-size: 0.8rem; margin-top: 2rem; } /* overlay0 */
+      details.debug {
+        margin-top: 1.75rem;
+        text-align: left;
+        border: 1px solid #313244; /* surface0 */
+        border-radius: 8px;
+        background: #11111b; /* crust */
+      }
+      details.debug summary {
+        cursor: pointer;
+        padding: 0.6rem 0.9rem;
+        color: #f5c2e7; /* pink */
+        font-size: 0.85rem;
+        list-style: none;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+      }
+      details.debug summary::-webkit-details-marker { display: none; }
+      details.debug[open] summary { border-bottom: 1px solid #313244; }
+      .debug-copy {
+        font-family: inherit;
+        font-size: 0.75rem;
+        color: #cdd6f4;
+        background: #313244; /* surface0 */
+        border: none;
+        border-radius: 6px;
+        padding: 0.25rem 0.6rem;
+        cursor: pointer;
+      }
+      .debug-copy:hover { background: #45475a; } /* surface1 */
+      pre.debug-json {
+        margin: 0;
+        padding: 0.9rem;
+        overflow-x: auto;
+        font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+        font-size: 0.78rem;
+        line-height: 1.5;
+        color: #a6adc8; /* subtext0 */
+        white-space: pre;
+      }
     </style>
   </head>
   <body>
@@ -76,7 +286,7 @@ function errorPage(status: number): string {
         <br />
         Email: <a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a>
       </p>
-      <p class="code">Error ${status}</p>
+      <p class="code">Error ${status}</p>${debugBlock}
     </div>
     <script>
       document.getElementById("discord-copy").addEventListener("click", function () {
@@ -85,7 +295,7 @@ function errorPage(status: number): string {
           el.classList.add("show");
           setTimeout(function () { el.classList.remove("show"); }, 1500);
         });
-      });
+      });${debugScript}
     </script>
   </body>
 </html>`;
@@ -99,17 +309,31 @@ export default {
       response = await fetch(request);
     } catch {
       // Origin totally unreachable (connection refused, DNS failure inside your infra, etc.)
-      return new Response(errorPage(521), {
-        status: 521,
-        headers: { "content-type": "text/html;charset=UTF-8" },
-      });
+      return new Response(
+        errorPage({ status: 521, origin: "unreachable", request }),
+        {
+          status: 521,
+          headers: { "content-type": "text/html;charset=UTF-8" },
+        },
+      );
     }
 
     if (response.status >= 500 && response.status < 600) {
-      return new Response(errorPage(response.status), {
-        status: response.status,
-        headers: { "content-type": "text/html;charset=UTF-8" },
-      });
+      const { text, truncated } = await readBodyCapped(response);
+      return new Response(
+        errorPage({
+          status: response.status,
+          origin: "5xx",
+          request,
+          originBody: text,
+          originBodyTruncated: truncated,
+          originHeaders: pickOriginHeaders(response.headers),
+        }),
+        {
+          status: response.status,
+          headers: { "content-type": "text/html;charset=UTF-8" },
+        },
+      );
     }
 
     return response;
