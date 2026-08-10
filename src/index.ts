@@ -181,6 +181,7 @@ function errorPage(details: ErrorDetails): string {
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/png" href="https://m.doughmination.gay/img/avatars/favicon.png" />
     <title>Site temporarily unavailable</title>
     <style>
       /* Matches personal-website: dark trans-pink palette + Comic Code.
