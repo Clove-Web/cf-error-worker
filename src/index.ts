@@ -183,34 +183,104 @@ function errorPage(details: ErrorDetails): string {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Site temporarily unavailable</title>
     <style>
-      /* Catppuccin Mocha, pink accent */
+      /* Matches personal-website: dark trans-pink palette + Comic Code.
+         Tokens mirror src/styles/themes.css.ts. */
+      @font-face {
+        font-family: "Comic Code";
+        src: url("https://m.doughmination.gay/f/Comic-Code/woff2/ComicCode-Regular.woff2") format("woff2"),
+             url("https://m.doughmination.gay/f/Comic-Code/woff/ComicCode-Regular.woff") format("woff");
+        font-weight: 400;
+        font-style: normal;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: "Comic Code";
+        src: url("https://m.doughmination.gay/f/Comic-Code/woff2/ComicCode-Medium.woff2") format("woff2"),
+             url("https://m.doughmination.gay/f/Comic-Code/woff/ComicCode-Medium.woff") format("woff");
+        font-weight: 500;
+        font-style: normal;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: "Comic Code";
+        src: url("https://m.doughmination.gay/f/Comic-Code/woff2/ComicCode-Bold.woff2") format("woff2"),
+             url("https://m.doughmination.gay/f/Comic-Code/woff/ComicCode-Bold.woff") format("woff");
+        font-weight: 700;
+        font-style: normal;
+        font-display: swap;
+      }
+      :root {
+        --bg-deep: #05060a;
+        --bg-raised: #0e1017;
+        --bg: #0a0b10;
+        --surface: #12141c;
+        --surface-hi: #1b1e2a;
+        --surface-higher: #232838;
+        --text-faint: #5b6480;
+        --text-dim: #6b7391;
+        --text-muted: #9aa3c2;
+        --text-soft: #c9cfe0;
+        --text: #f4f6fb;
+        --accent: #f5a9b8;
+        --accent-alt: #d15f8c;
+        color-scheme: dark;
+      }
+      * { box-sizing: border-box; }
       body {
-        font-family: "Comic Sans MS", "Comic Sans", cursive, sans-serif;
-        background: #1e1e2e; /* base */
-        color: #cdd6f4; /* text */
+        font-family: "Comic Code", ui-monospace, SFMono-Regular, Menlo, monospace;
+        background: linear-gradient(135deg, var(--bg) 0%, var(--bg-raised) 60%, var(--bg-deep) 100%);
+        color: var(--text);
         display: flex;
         min-height: 100vh;
+        min-height: 100dvh;
         align-items: center;
         justify-content: center;
         margin: 0;
         text-align: center;
-        padding: 2rem;
+        padding: 1.5rem 1rem;
+        position: relative;
+      }
+      /* Estrogen watermark, matching the site background. */
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        background: url("https://m.doughmination.gay/img/bg/estrogen.svg") center / cover no-repeat;
+        filter: invert(86%) sepia(8%) saturate(900%) hue-rotate(190deg) brightness(105%);
+        opacity: 0.05;
+        pointer-events: none;
+        z-index: 0;
+      }
+      /* Miku chibi in the corner, matching the site background. */
+      body::after {
+        content: "";
+        position: fixed;
+        right: 0.5rem;
+        bottom: 0.5rem;
+        width: clamp(96px, 14vw, 168px);
+        aspect-ratio: 564 / 547;
+        background: url("https://m.doughmination.gay/img/bg/miku.png") center / contain no-repeat;
+        opacity: 0.18;
+        pointer-events: none;
+        z-index: 0;
       }
       .card {
+        position: relative;
+        z-index: 1;
         max-width: 420px;
-        background: #181825; /* mantle */
-        border: 1px solid #313244; /* surface0 */
+        background: var(--surface);
+        border: 1px solid var(--surface-higher);
         border-radius: 12px;
         padding: 2.5rem 2rem;
       }
-      h1 { font-size: 1.4rem; margin-bottom: 0.5rem; color: #f5c2e7; } /* pink */
-      p { line-height: 1.5; color: #bac2de; } /* subtext1 */
+      h1 { font-size: 1.4rem; margin-bottom: 0.5rem; color: var(--accent); font-weight: 700; }
+      p { line-height: 1.5; color: var(--text-soft); }
       .contact { margin-top: 1.5rem; font-size: 0.95rem; }
       .contact a, .contact button {
-        color: #f5c2e7; /* pink */
+        color: var(--accent);
         text-decoration: none;
-        font-weight: 600;
-        border-bottom: 1px solid rgba(245, 194, 231, 0.4);
+        font-weight: 500;
+        border-bottom: 1px solid rgba(245, 169, 184, 0.4);
         transition: border-color 0.15s ease;
       }
       .contact button {
@@ -223,22 +293,22 @@ function errorPage(details: ErrorDetails): string {
         cursor: pointer;
         padding: 0;
       }
-      .contact a:hover, .contact button:hover { border-color: #f5c2e7; }
-      .sep { color: #6c7086; margin: 0 0.35rem; }
-      .copied { color: #a6e3a1; font-size: 0.8rem; margin-left: 0.5rem; opacity: 0; transition: opacity 0.15s ease; }
+      .contact a:hover, .contact button:hover { border-color: var(--accent); }
+      .sep { color: var(--text-dim); margin: 0 0.35rem; }
+      .copied { color: var(--accent); font-size: 0.8rem; margin-left: 0.5rem; opacity: 0; transition: opacity 0.15s ease; }
       .copied.show { opacity: 1; }
-      .code { color: #6c7086; font-size: 0.8rem; margin-top: 2rem; } /* overlay0 */
+      .code { color: var(--text-faint); font-size: 0.8rem; margin-top: 2rem; }
       details.debug {
         margin-top: 1.75rem;
         text-align: left;
-        border: 1px solid #313244; /* surface0 */
+        border: 1px solid var(--surface-higher);
         border-radius: 8px;
-        background: #11111b; /* crust */
+        background: var(--bg-deep);
       }
       details.debug summary {
         cursor: pointer;
         padding: 0.6rem 0.9rem;
-        color: #f5c2e7; /* pink */
+        color: var(--accent);
         font-size: 0.85rem;
         list-style: none;
         display: flex;
@@ -247,26 +317,26 @@ function errorPage(details: ErrorDetails): string {
         gap: 0.5rem;
       }
       details.debug summary::-webkit-details-marker { display: none; }
-      details.debug[open] summary { border-bottom: 1px solid #313244; }
+      details.debug[open] summary { border-bottom: 1px solid var(--surface-higher); }
       .debug-copy {
         font-family: inherit;
         font-size: 0.75rem;
-        color: #cdd6f4;
-        background: #313244; /* surface0 */
+        color: var(--text);
+        background: var(--surface-hi);
         border: none;
         border-radius: 6px;
         padding: 0.25rem 0.6rem;
         cursor: pointer;
       }
-      .debug-copy:hover { background: #45475a; } /* surface1 */
+      .debug-copy:hover { background: var(--surface-higher); }
       pre.debug-json {
         margin: 0;
         padding: 0.9rem;
         overflow-x: auto;
-        font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+        font-family: "Comic Code", ui-monospace, SFMono-Regular, Menlo, monospace;
         font-size: 0.78rem;
         line-height: 1.5;
-        color: #a6adc8; /* subtext0 */
+        color: var(--text-muted);
         white-space: pre;
       }
     </style>
